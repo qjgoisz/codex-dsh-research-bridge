@@ -1,11 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, readdirSync, existsSync, symlinkSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, readdirSync, existsSync, symlinkSync, mkdirSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import { main, readSnapshot, saveConfig } from '../scripts/configure-bridge.mjs';
 import { BUILT_IN_CONFIG } from '../src/config.mjs';
+import { desktopWorkerConfig } from '../src/platform/desktop.mjs';
+
+function desktopFixture(cwd, parts, name = 'dsh') {
+  const bin = join(cwd, ...parts, 'runtime', 'cli', 'bin');
+  mkdirSync(bin, { recursive: true });
+  const launcher = join(bin, name);
+  writeFileSync(launcher, 'fixture; never execute');
+  chmodSync(launcher, 0o755);
+  return launcher;
+}
 
 function fixture(t) {
   const cwd = mkdtempSync(join(tmpdir(), 'bridge 配置 '));
@@ -109,4 +119,53 @@ test('refuses symlinks, including dangling symlinks', { skip: process.platform =
   const { path, cwd } = fixture(t);
   symlinkSync(join(cwd, 'absent.json'), path);
   assert.throws(() => readSnapshot(path), /不接受符号链接/);
+});
+
+test('Desktop preset preserves research route and clears stale npm/runtime overrides without launching anything', async t => {
+  const { cwd, path, run } = fixture(t);
+  const desktop = join(cwd, 'Desktop 安装');
+  const launcher = desktopFixture(desktop, ['resources'], process.platform === 'win32' ? 'dsh.exe' : 'dsh');
+  writeFileSync(path, JSON.stringify({ ...BUILT_IN_CONFIG, model: 'chosen', dshRoot: 'old-npm', workerEntry: 'old.js', nodeBin: 'old-node', workerArgs: ['old'] }));
+  await run(['--desktop-root', desktop, '--check']);
+  assert.equal(JSON.parse(readFileSync(path, 'utf8')).workerEntry, 'old.js');
+  await run(['--desktop-root', desktop, '--yes']);
+  const config = JSON.parse(readFileSync(path, 'utf8'));
+  assert.equal(config.workerCommand, launcher);
+  assert.equal(config.model, 'chosen');
+  for (const key of ['dshRoot', 'workerEntry', 'nodeBin', 'workerArgs']) assert.equal(config[key], null);
+  assert.equal(config.transport, 'direct');
+});
+
+test('Desktop layouts inspect macOS app and Resources roots, plus Windows executable fixtures', t => {
+  const { cwd } = fixture(t);
+  const app = join(cwd, 'Harness.app');
+  const mac = desktopFixture(app, ['Contents', 'Resources']);
+  assert.equal(desktopWorkerConfig(app, { platform: 'darwin' }).workerCommand, mac);
+  assert.equal(desktopWorkerConfig(join(app, 'Contents', 'Resources'), { platform: 'darwin' }).workerCommand, mac);
+  const win = join(cwd, 'Windows 安装');
+  const exe = desktopFixture(win, ['resources'], 'dsh.exe');
+  assert.equal(desktopWorkerConfig(win, { platform: 'win32' }).workerCommand, exe);
+});
+
+test('Desktop missing or ambiguous launchers fail without changing configuration', async t => {
+  const { cwd, path, run } = fixture(t);
+  await assert.rejects(run(['--desktop', '--check']), /必须指定/);
+  await assert.rejects(run(['--desktop-root', cwd, '--yes']), /未找到/);
+  assert.equal(existsSync(path), false);
+  desktopFixture(cwd, ['resources']);
+  desktopFixture(cwd, ['Contents', 'Resources']);
+  assert.throws(() => desktopWorkerConfig(cwd, { platform: 'linux' }), /多个/);
+});
+
+test('Desktop interactive selection still requires save confirmation', async t => {
+  const { cwd, path, run } = fixture(t);
+  const desktop = join(cwd, 'Desktop');
+  desktopFixture(desktop, ['resources'], process.platform === 'win32' ? 'dsh.exe' : 'dsh');
+  const output = await run(['--desktop', '--set', 'model', 'chosen'], `${desktop}\nn\n`);
+  assert.match(output, /\.app\/Contents\/Resources/);
+  assert.match(output, /deepseek-account/);
+  assert.ok(output.indexOf('Desktop 路径说明') < output.indexOf('Desktop 安装目录、macOS'));
+  assert.equal(existsSync(path), false);
+  await run(['--desktop', '--set', 'model', 'chosen'], `${desktop}\ny\n`);
+  assert.equal(JSON.parse(readFileSync(path, 'utf8')).model, 'chosen');
 });

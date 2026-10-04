@@ -7,7 +7,7 @@
 | bridge + fake ACP | 离线回归、审批/产物、会话复用、澄清、取消、unknown、EOF 收尾 | 不证明真实 provider 或 Desktop 行为 |
 | npm DSH + ACP profile | probe 与显式真实模型冒烟 | 独立 ACP 会话，不保证共享 WebUI 活跃聊天或全部 web 插件 |
 | posix-pipes | Linux 上显式选择并独立探测 | Linux 专用可选传输 |
-| Linux Desktop | 按实际 CLI/运行时入口进行独立验收 | 不将其他桥版本或构建的历史记录当作本版本验收 |
+| Linux Desktop CLI/ACP | 新桥经 MCP 的隔离模型冒烟通过：产物、模型路由、会话复用、澄清、取消响应、输入保护与 EOF 收尾 | 不证明图形界面操作、运行中工具中断或其他构建兼容性；不同版本仍需独立验收 |
 | Windows/macOS 官方 Desktop | 配置启动器/运行时与完整 argv，再执行独立验收 | 原生客户端尚未验收 |
 | ARM64 | 按对应安装与架构验证 | 尚未验收 |
 

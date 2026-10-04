@@ -13,6 +13,8 @@ node src/cli.mjs serve --state-root ./bridge-state
 
 在仓库目录运行。交互式配置脚本跨平台，预览校验后确认保存，修改已有文件时保留原始备份；也可用 `config --init` 仅创建默认配置。模板默认 deepseek-official/deepseek-flash/high；运行时目录是路由与推理选项的依据，不会自动换模型。凭据继续由 DSH 管理。
 
+使用 Desktop 时运行 `node scripts/configure-bridge.mjs --desktop`，按提示指定安装目录以定位 CLI；不会启动图形应用或调用模型。交互页面会提示 `.app`、`Contents/Resources` 与 `resources` 的常见结尾。微信/账号登录应选择 `deepseek-account` 并共用 Desktop 的 DSH home；`deepseek-official` 需要 API 密钥，Desktop 预置不会自动切换路由。入口布局及平台限制见使用文档。
+
 真实 DSH 的接入需按安装版本进行独立探测与验收。已提供离线回归、无模型协议探测和显式真实模型冒烟；Windows/macOS 官方 Desktop、ARM64 与活跃 WebUI 聊天共享仍待验证。详见兼容性说明。
 
 - [使用与部署](docs/usage.md)

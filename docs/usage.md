@@ -50,6 +50,46 @@ sh scripts/configure-bridge.sh
 npm run configure
 ```
 
+连接 Desktop 时，可让配置脚本查找安装目录中的 CLI 启动器：
+
+```sh
+node scripts/configure-bridge.mjs --desktop
+# 或指定目录，仅预览、不保存
+node scripts/configure-bridge.mjs --desktop-root "<Desktop 安装目录>" --check
+```
+
+交互式目录问答前会显示路径说明：
+
+| 输入类型 | 常见结尾或示例 |
+| --- | --- |
+| macOS 应用包 | `/Applications/<应用名>.app` |
+| macOS 资源目录 | `<应用名>.app/Contents/Resources`，注意大写 |
+| Linux 安装根目录 | 如 `/usr/lib/deepseek-harness`，没有固定后缀 |
+| Linux/Windows 资源目录 | 通常以 `/resources` 结尾 |
+
+脚本在这些目录下查找 `runtime/cli/bin/dsh`（Windows 为 `dsh.exe`）。
+这是安装入口，不是用户配置目录 `~/.dsh`；无需新增启动包装脚本。
+
+#### Desktop 微信/账号认证
+
+`deepseek-account` 使用 Desktop 账号登录，包括微信登录；`deepseek-official` 是需要
+`DEEPSEEK_API_KEY` 的 API 路由。Desktop 预置保留已有 provider/model，不会自动切换认证。
+希望复用账号登录时，显式选择账号路由，且桥的 `dshHome`（或 `DSH_HOME`）应与 Desktop 相同，
+通常为 `~/.dsh`；桥仍使用 `acp` profile，不复制 Desktop 的整个 profile 补丁或凭据库。
+
+```sh
+node scripts/configure-bridge.mjs --desktop-root "<安装根目录、.app 或资源目录>" --set provider deepseek-account --set model deepseek-flash --set profile acp --check
+```
+
+确认预览后去掉 `--check`，按提示保存，再重启桥。模型 id 以实际 worker 目录为准；
+目录读取或结构校验成功不等于认证成功，需要另行验证一次真实模型回答。
+若仍报 `DEEPSEEK_API_KEY` 缺失，检查生效路由是否仍为 `deepseek-official`。
+不要在桥配置或文档中填写登录 token 或 API 密钥。Windows/macOS 原生账号调用尚未验收。
+
+`--desktop` 会先询问安装目录，再进入通常的字段问答和保存确认。也可传入 macOS `.app` 或 `Resources` 目录。脚本检查 `resources/runtime/cli/bin/`、`Contents/Resources/runtime/cli/bin/` 和直接提供的 Resources 目录；Linux/macOS 查找可执行 `dsh`，Windows 查找 `dsh.exe`。这些是限定的候选布局，不保证每个 Desktop 版本都有相同入口；若仅有 `.cmd/.bat` 或未找到入口，会明确报错，不执行图形启动器。Windows/macOS 原生兼容性仍需独立验证。
+
+Desktop 预置设置 `workerCommand` 和 `transport=direct`，清除旧 npm 根与 JS 运行时覆盖；保留 provider/model、推理档位、profile、dshHome 和审批策略。`workerArgs=null` 表示按当前 profile 构建默认参数。显式 `--set` 优先于预置；最终预览为准。不会启动 Desktop、修改其配置、迁移凭据或静默切换模型。保存后先运行 preflight 和独立 probe；模型路由与真实委派需另外验收。
+
 Enter 保留当前值；可空字段输入 `null`，`workerArgs` 输入 JSON 字符串数组。脚本预览完整 schema 2 配置并校验，最后输入 `y` 才保存。已有文件会按原始字节备份为 `bridge.config.json.bak.*`；内容未变时不写入、不备份。原配置中的 `_` / `$` 注释字段保留；保存旧 schema 1 时升级为 schema 2。检测到外部修改、符号链接或其他配置进程的锁时拒绝覆盖。默认配置路径是启动目录；用 `--config` 指定其他位置。
 
 脚本只读取桥配置及已有的 `models.json` 缓存，不启动 DSH、不调用模型，也不修改 DSH profile、凭据或 Codex 设置。用 `--state-root` 指向桥状态目录即可显示缓存中的 provider/model 菜单；无缓存时手工填写。缓存可能过期，结构校验通过不表示模型、档位或安装已验证。审批默认 `ask`；选择 `allow-once` 会自动批准 DSH 发出的单次允许选项。
