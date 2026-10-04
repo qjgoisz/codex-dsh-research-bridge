@@ -1,0 +1,29 @@
+{
+  "id": "oscillator-energy-001",
+  "objective": "核对给定谐振子参数的能量与量纲，保存可复现结果。",
+  "phase": "numerics",
+  "project": "oscillator",
+  "workspace": "__WORKSPACE__",
+  "contextRevision": 0,
+  "plan": {
+    "summary": "从输入独立计算并核对",
+    "steps": [
+      "读取输入参数与单位",
+      "独立计算并核对极限",
+      "保存结果与运行命令"
+    ]
+  },
+  "acceptance": [
+    "参数与单位来源明确",
+    "计算结果可由保存的命令复现",
+    "不将数值结果当作普遍理论证明"
+  ],
+  "research": {
+    "model": "E_n = (n + 1/2) hbar omega",
+    "units": "SI",
+    "inputVersion": "由调用方填写"
+  },
+  "stopIf": [
+    "缺少单位、参数或模型假设时提问"
+  ]
+}

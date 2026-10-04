@@ -1,0 +1,12 @@
+node_modules/
+.bridge-state/
+.verification/
+/bridge.config.json
+# Local development instructions and historical machine/session evidence.
+/AGENTS.md
+/bridge-compat-handoff/
+*.configure.lock
+*.json.bak.*
+*.json.tmp.*
+*.tgz
+*.log

@@ -1,0 +1,10 @@
+{
+  "schema": 2,
+  "provider": "deepseek-official",
+  "model": "deepseek-flash",
+  "reasoningEffort": "high",
+  "exposeModelChoice": false,
+  "transport": "direct",
+  "profile": "acp",
+  "approvalMode": "ask"
+}

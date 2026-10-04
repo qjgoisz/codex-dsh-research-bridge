@@ -1,0 +1,33 @@
+{
+  "name": "codex-dsh-bridge",
+  "version": "0.2.0",
+  "license": "GPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "description": "Persistent MCP \u2192 ACP research delegation bridge with platform adapters",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "dsh-bridge": "./src/cli.mjs"
+  },
+  "scripts": {
+    "test": "node test/run.mjs",
+    "test:unit": "node --test test/refactor.test.mjs test/config-platform-dsh.test.mjs test/configure-bridge.test.mjs",
+    "configure": "node scripts/configure-bridge.mjs",
+    "check": "node scripts/check.mjs",
+    "probe": "node scripts/probe.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "files": [
+    "src",
+    "scripts",
+    "examples",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "NOTICE.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md"
+  ]
+}
