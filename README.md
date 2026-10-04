@@ -16,6 +16,7 @@ node src/cli.mjs serve --state-root ./bridge-state
 真实 DSH 的接入需按安装版本进行独立探测与验收。已提供离线回归、无模型协议探测和显式真实模型冒烟；Windows/macOS 官方 Desktop、ARM64 与活跃 WebUI 聊天共享仍待验证。详见兼容性说明。
 
 - [使用与部署](docs/usage.md)
+- [Windows 与 macOS 快速开始](docs/usage.md#windows-与-macos-快速开始)
 - [架构与不变量](docs/architecture.md)
 - [兼容性与验证记录](docs/compatibility.md)
 - [配置与状态兼容](docs/migration.md)

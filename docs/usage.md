@@ -2,6 +2,42 @@
 
 需要 Node.js 24+，以及具有 ACP v1 入口的 DSH 安装。先确认 DSH 自身能使用所需 provider/model；桥不配置凭据、不初始化 profile，也不修改 Codex 或 DSH 配置。使用原有 DSH 安装的 ACP worker 不代表共享 WebUI 的活跃聊天。
 
+## Windows 与 macOS 快速开始
+
+以下按源码仓库使用，需要先安装 Node.js 24+、Git 和可用的 DSH ACP 入口。无需 Bash 或额外 npm 依赖。
+
+### Windows（PowerShell）
+
+```powershell
+git clone https://github.com/qjgoisz/codex-dsh-research-bridge.git
+cd codex-dsh-research-bridge
+node --version
+node scripts/configure-bridge.mjs
+node src/cli.mjs preflight
+```
+
+配置使用 `transport=direct`。若自动发现不能定位 DSH，填写 `nodeBin` 为实际 `node.exe` 路径、`workerEntry` 为 DSH 的 JS CLI 入口，`workerArgs=null` 使用默认 profile 参数；自定义完整参数时填写 JSON 数组。不要把 `.cmd` / `.bat` 作为 `workerCommand`。JSON 中的反斜杠须写成 `\\`，或使用正斜杠。
+
+向 MCP 客户端登记实际 `node.exe` 为 command，args 为下面命令中 `node` 之后的各项，使用绝对路径：
+
+```powershell
+node "<桥目录>/src/cli.mjs" serve --config "<配置文件>" --state-root "<独立状态目录>"
+```
+
+### macOS（Terminal）
+
+```sh
+git clone https://github.com/qjgoisz/codex-dsh-research-bridge.git
+cd codex-dsh-research-bridge
+node --version
+node scripts/configure-bridge.mjs
+node src/cli.mjs preflight
+```
+
+同样使用 `transport=direct`，不要选择 Linux 专用的 `posix-pipes`。向 MCP 客户端登记 Node 的绝对路径（可用 `command -v node` 查看），args 使用 `src/cli.mjs serve --config ... --state-root ...` 的各项绝对路径。图形应用不一定继承终端 PATH。
+
+两个平台的 Desktop 都应先确认对应客户端版本确实提供 CLI/ACP 入口；需要时配置显式运行时与入口，不假定安装包内部路径。原生 Windows/macOS 官方 Desktop 尚未验收，以上是启动与配置步骤。`preflight` 是安装/配置预检；完整协议验证可运行 `node scripts/probe.mjs --config <配置> --report <新的报告文件>`，它会启动测试 worker，但不发送模型提示。
+
 ## 配置
 
 推荐使用交互式配置：
