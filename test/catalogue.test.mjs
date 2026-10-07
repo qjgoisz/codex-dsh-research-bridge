@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { catalogueInstallation, collectConfiguredRoutes } from '../src/platform/catalogue.mjs';
@@ -37,7 +37,7 @@ test('Desktop package discovery supports resource layouts without launching CLI'
   const command=join(bin,'dsh.exe');writeFileSync(command,'never execute');
   const pkg=join(resources,'app','dsh','node_modules','@deepseek-ai','dsh');mkdirSync(pkg,{recursive:true});
   writeFileSync(join(pkg,'package.json'),JSON.stringify({name:'@deepseek-ai/dsh',version:'fixture'}));
-  assert.equal(catalogueInstallation({workerCommand:command}).root,pkg);
+  assert.equal(catalogueInstallation({workerCommand:command}).root,realpathSync(pkg));
  }
  assert.equal(catalogueInstallation({workerCommand:join(root,'absent')}),null);
 });

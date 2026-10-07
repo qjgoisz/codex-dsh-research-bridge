@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync, rmSync, statSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createConnection } from 'node:net';
@@ -163,7 +163,7 @@ test('model discovery preserves each client working directory without model prom
     assert.equal(response.result.isError, undefined);
   }
   const agent = JSON.parse(readFileSync(join(root, 'agent.json')));
-  assert.deepEqual(new Set(agent.sessions.map(session => session.cwd)), new Set([root, workspace]));
+  assert.deepEqual(new Set(agent.sessions.map(session => realpathSync(session.cwd))), new Set([root, workspace].map(path => realpathSync(path))));
   assert.equal(agent.prompts, 0);
   assert.equal(existsSync(join(state, 'bridge.lock')), true);
   await a.stop(); await b.stop();
