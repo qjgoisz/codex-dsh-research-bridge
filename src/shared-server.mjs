@@ -123,14 +123,19 @@ export async function serveSharedClient({ root, fingerprint, workspace, hostArgs
   await new Promise((resolve, reject) => {
     let ended = false;
     const onEnd = () => { ended = true; socket.end(); };
+    const disconnected = cause => Object.assign(
+      new Error('共享桥连接中断；未重发请求，请重连后查询任务状态。', { cause }),
+      cause?.code ? { code: cause.code } : {},
+    );
     const onError = error => { socket.destroy(); reject(error); };
+    const onSocketError = error => { socket.destroy(); reject(disconnected(error)); };
     input.once('end', onEnd); input.once('error', onError); output.once('error', onError);
-    socket.once('error', onError);
+    socket.once('error', onSocketError);
     socket.once('close', () => {
       input.unpipe(socket); socket.unpipe(output);
       input.off('end', onEnd); input.off('error', onError); output.off('error', onError);
       input.pause();
-      if (ended) resolve(); else reject(new Error('共享桥连接中断；未重发请求，请重连后查询任务状态。'));
+      if (ended) resolve(); else reject(disconnected());
     });
     input.pipe(socket, { end: false }); socket.pipe(output, { end: false }); socket.resume();
     if (input.readableEnded) onEnd();

@@ -4,7 +4,9 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync, rmSync, statSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createConnection } from 'node:net';
+import { createConnection, createServer } from 'node:net';
+import { PassThrough } from 'node:stream';
+import { serveSharedClient } from '../src/shared-server.mjs';
 import { contract, FAKE_AGENT } from './fixtures.mjs';
 
 const CLI = join(import.meta.dirname, '..', 'src', 'cli.mjs');
@@ -18,14 +20,29 @@ function setup(t) {
   const state = join(root, 'state'); mkdirSync(state);
   const workspace = join(root, 'workspace'); mkdirSync(workspace);
   const clients = [];
+  let abruptlyStopped = null;
   t.after(async () => {
-    for (const client of clients) if (client.child.exitCode === null && client.child.signalCode === null) client.child.kill('SIGTERM');
-    if (existsSync(join(state, 'daemon.json'))) {
-      const { pid } = JSON.parse(readFileSync(join(state, 'daemon.json')));
-      try { process.kill(pid, 'SIGTERM'); } catch {}
-      await until(() => !existsSync(join(state, 'bridge.lock')));
+    // Windows kill(SIGTERM) is a hard stop; normal cleanup must use EOF/idle.
+    for (const client of clients) {
+      if (client.child.exitCode === null && client.child.signalCode === null) client.child.stdin.end();
     }
-    rmSync(root, { recursive: true, force: true });
+    try {
+      await until(() => clients.every(c => c.child.exitCode !== null || c.child.signalCode !== null), 12000);
+      if (existsSync(join(state, 'daemon.json'))) {
+        const { pid } = JSON.parse(readFileSync(join(state, 'daemon.json')));
+        if (pid !== abruptlyStopped) await until(() => !existsSync(join(state, 'bridge.lock')));
+      }
+    } finally {
+      for (const client of clients) {
+        if (client.child.exitCode === null && client.child.signalCode === null) client.child.kill('SIGKILL');
+      }
+      // Emergency cleanup applies only to this fixture's own backend.
+      if (existsSync(join(state, 'daemon.json'))) {
+        const { pid } = JSON.parse(readFileSync(join(state, 'daemon.json')));
+        if (pid !== abruptlyStopped) { try { process.kill(pid, 'SIGKILL'); } catch {} }
+      }
+      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
   });
   const start = (extra = [], cwd = root) => {
     const child = spawn(process.execPath, [CLI, 'serve', '--state-root', state,
@@ -63,7 +80,9 @@ function setup(t) {
     };
     clients.push(client); return client;
   };
-  return { root, state, workspace, start };
+  return { root, state, workspace, start,
+    hardStopHost(pid) { abruptlyStopped = pid; process.kill(pid, 'SIGKILL'); },
+  };
 }
 const initialize = c => c.rpc(1, 'initialize', { protocolVersion: '2025-06-18' });
 const tool = (c, id, name, args) => c.rpc(id, 'tools/call', { name, arguments: args });
@@ -142,15 +161,17 @@ test('unauthenticated local connections cannot call tools or disrupt authenticat
   await until(() => !existsSync(join(state, 'bridge.lock')));
 });
 
-test('host shutdown closes clients without automatic replay or respawn', { timeout: 15000 }, async t => {
-  const { state, start } = setup(t);
+test('abrupt host exit reports disconnect without respawn and preserves recovery evidence', { timeout: 15000 }, async t => {
+  const { state, start, hardStopHost } = setup(t);
   const a = start(); await initialize(a);
-  const { pid } = JSON.parse(readFileSync(join(state, 'daemon.json')));
-  process.kill(pid, 'SIGTERM');
+  const metadata = readFileSync(join(state, 'daemon.json'), 'utf8');
+  const lock = readFileSync(join(state, 'bridge.lock'), 'utf8');
+  hardStopHost(JSON.parse(metadata).pid);
   assert.notEqual(await a.closed, 0);
   assert.match(a.stderr(), /未重发请求/);
-  await until(() => !existsSync(join(state, 'bridge.lock')));
-  assert.equal(existsSync(join(state, 'daemon.json')), false);
+  // A hard kill cannot run JS cleanup on any platform. Never auto-steal its lock.
+  assert.equal(readFileSync(join(state, 'bridge.lock'), 'utf8'), lock);
+  assert.equal(readFileSync(join(state, 'daemon.json'), 'utf8'), metadata);
 });
 
 test('model discovery preserves each client working directory without model prompts', { timeout: 15000 }, async t => {
@@ -176,4 +197,49 @@ test('invalid stale endpoint metadata does not prevent starting a new state owne
   assert.equal(JSON.parse(readFileSync(join(state, 'daemon.json'))).pid,
     JSON.parse(readFileSync(join(state, 'bridge.lock'))).pid);
   await a.stop();
+});
+
+// Exercise the socket error event, not just an orderly FIN/close.
+test('TCP reset retains the error code and reports no replay', { timeout: 15000 }, async t => {
+  const root = mkdtempSync(join(tmpdir(), 'bridge-reset-'));
+  const input = new PassThrough(), output = new PassThrough();
+  let requests = 0;
+  const sockets = new Set();
+  const listener = createServer(socket => {
+    sockets.add(socket); socket.on('error', () => {});
+    socket.on('close', () => sockets.delete(socket));
+    let buffer = '', authenticated = false;
+    socket.on('data', chunk => {
+      buffer += chunk;
+      while (buffer.includes('\n')) {
+        const i = buffer.indexOf('\n'); const line = buffer.slice(0, i); buffer = buffer.slice(i + 1);
+        if (!authenticated) {
+          assert.equal(JSON.parse(line).token, 'fixture-token');
+          authenticated = true; socket.write('{"ok":true}\n');
+        } else {
+          requests++; socket.resetAndDestroy(); return;
+        }
+      }
+    });
+  });
+  t.after(async () => {
+    input.destroy(); output.destroy();
+    for (const socket of sockets) socket.destroy();
+    await new Promise(resolve => listener.close(resolve));
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  });
+  await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
+  writeFileSync(join(root, 'daemon.json'), JSON.stringify({ schema: 1,
+    port: listener.address().port, token: 'fixture-token' }));
+  const done = serveSharedClient({ root, fingerprint: 'fixture', workspace: root,
+    hostArgs: [], input, output });
+  const rejected = assert.rejects(done, error => {
+    assert.match(error.message, /未重发请求/);
+    assert.equal(error.code, 'ECONNRESET');
+    assert.equal(error.cause.code, 'ECONNRESET');
+    return true;
+  });
+  input.write('{"jsonrpc":"2.0","id":1,"method":"ping"}\n');
+  await rejected;
+  assert.equal(requests, 1);
 });
