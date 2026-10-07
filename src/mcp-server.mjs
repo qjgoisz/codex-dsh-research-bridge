@@ -230,10 +230,12 @@ export class McpServer {
   #initialized = false;
   #tools;
   #maxWaitMs;
+  #workspace;
 
-  constructor({ bridge, version = BRIDGE_VERSION, exposeModelChoice = null, defaults = {}, maxWaitMs = MAX_WAIT_MS }) {
+  constructor({ bridge, version = BRIDGE_VERSION, exposeModelChoice = null, defaults = {}, maxWaitMs = MAX_WAIT_MS, workspace = null }) {
     if (!bridge) throw new Error('bridge_required');
     this.#bridge = bridge;
+    this.#workspace = workspace;
     this.#version = version;
     this.#maxWaitMs = Math.min(maxWaitMs, MAX_WAIT_MS);
 
@@ -434,7 +436,7 @@ export class McpServer {
       });
     }
     try {
-      const discovered = await this.#bridge.discoverModels({ refresh: args.refresh !== false });
+      const discovered = await this.#bridge.discoverModels({ refresh: args.refresh !== false, ...(this.#workspace === null ? {} : { workspace: this.#workspace }) });
       const summary = discovered.summary;
       const selection = this.#bridge.selectionDefaults;
       return ok({

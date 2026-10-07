@@ -1,5 +1,6 @@
 node_modules/
 .bridge-state/
+/bridge-state/
 .verification/
 /bridge.config.json
 # Local development instructions and historical machine/session evidence.

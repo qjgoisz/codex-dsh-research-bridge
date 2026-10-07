@@ -2,7 +2,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { stdin, stdout } from 'node:process';
 
 import { Store, StoreError } from './store.mjs';
@@ -10,6 +10,7 @@ import { SessionMap } from './session-map.mjs';
 import { Bridge, BridgeError } from './orchestration.mjs';
 import { McpServer, serveStdio } from './mcp-server.mjs';
 import { installShutdownHandlers } from './shutdown.mjs';
+import { canonicalStateRoot, hostFingerprint, serveSharedClient, serveSharedHost } from './shared-server.mjs';
 import { preflightWorker, DEFAULT_DSH_HOME, locateDsh } from './worker.mjs';
 import { CatalogueCache, describeSelector } from './models.mjs';
 import {
@@ -22,7 +23,7 @@ const DEFAULT_STATE_ROOT = resolve(process.cwd(), '.bridge-state');
 export const USAGE = `用法：dsh-bridge <命令> [选项]
 
 命令
-  serve                            以 MCP server 形式在 stdio 上服务（供 Codex 调用）
+  serve                            MCP stdio 客户端，自动连接共享后台（供 Codex 调用）
   delegate --file <契约.json>       提交任务；--file - 表示从 stdin 读取
   status [--id <任务id>]           查询任务状态
   result --id <任务id>             取回任务结果
@@ -56,14 +57,16 @@ export const USAGE = `用法：dsh-bridge <命令> [选项]
   --approval-mode <模式>    ask（默认）/ deny / allow-once
   --request-timeout-ms <毫秒>  ACP 请求超时
   --workspace <目录>        models 命令用于建立会话的工作区（默认当前目录）
+  --standalone          serve 使用旧的单进程模式，独占状态目录
+  --idle-timeout-ms <毫秒>  共享后台在最后一个客户端离开后延迟退出（默认 30000）
   --help                显示本说明
 `;
 
 export function parseArgs(argv) {
   const flags = {};
   const positional = [];
-  const valueFlags = new Set(['config','state-root','dsh-home','dsh-root','profile','provider','model-id','model','reasoning','transport','prompt-timeout-ms','worker-command','worker-arg','workspace','id','file','text','verdict','reason','actor','approval-mode','request-timeout-ms']);
-  const booleanFlags = new Set(['wait', 'stale', 'help', 'json', 'refresh', 'expose-model-choice', 'init']);
+  const valueFlags = new Set(['config','state-root','dsh-home','dsh-root','profile','provider','model-id','model','reasoning','transport','prompt-timeout-ms','worker-command','worker-arg','workspace','id','file','text','verdict','reason','actor','approval-mode','request-timeout-ms','idle-timeout-ms','host-fingerprint']);
+  const booleanFlags = new Set(['wait', 'stale', 'help', 'json', 'refresh', 'expose-model-choice', 'init', 'standalone']);
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (!token.startsWith('--')) {
@@ -234,6 +237,28 @@ export async function main(argv) {
       note: '选择值的真实格式由 DSH 决定（JSON.stringify([provider, model])），桥会自行编码；不要手写。',
     }, true);
     return 0;
+  }
+
+  if (command === 'serve-host' || (command === 'serve' && !flags.standalone)) {
+    const idleMs = Number(flags['idle-timeout-ms'] ?? 30000);
+    if (!Number.isSafeInteger(idleMs) || idleMs < 100 || idleMs > 3600000) {
+      throw new Error('--idle-timeout-ms 必须为 100 到 3600000 的整数');
+    }
+    common.stateRoot = canonicalStateRoot(resolve(common.stateRoot));
+    const fingerprint = hostFingerprint({ ...common, idleMs });
+    if (command === 'serve-host') {
+      if (flags['host-fingerprint'] !== fingerprint) throw new Error('共享后台启动期间配置或代码已变化，请重试。');
+      return serveSharedHost({ root: common.stateRoot, fingerprint, idleMs, open: () => openBridge(common) });
+    }
+    let commandIndex = 0;
+    while (argv[commandIndex]?.startsWith('--')) {
+      commandIndex += flags[argv[commandIndex].slice(2)] === true ? 1 : 2;
+    }
+    const hostArgs = [fileURLToPath(import.meta.url), ...argv];
+    hostArgs[commandIndex + 1] = 'serve-host';
+    hostArgs.push('--host-fingerprint', fingerprint);
+    return serveSharedClient({ root: common.stateRoot, fingerprint,
+      workspace: common.defaultWorkspace, hostArgs, input: stdin, output: stdout });
   }
 
   if (command === 'serve') {

@@ -24,7 +24,7 @@ function startServer(ctx, { scenario = 'normal', extraArgs = [] } = {}) {
   const workspace = ctx.tempDir('bridge-e2e-ws-');
   const child = spawn(process.execPath, [
     CLI,
-    'serve',
+    'serve', '--standalone',
     '--state-root', join(root, 'state'),
     '--dsh-home', join(root, 'dsh-home'),
     // Replace the worker with the fake ACP agent. This is the same public
@@ -230,7 +230,7 @@ suite.test('preflight 在缺少 acp profile 时以非零退出并说明下一步
   const dshHome = ctx.tempDir('bridge-e2e-dsh-');
   const child = spawn(process.execPath, [
     CLI, 'preflight', '--state-root', stateRoot, '--dsh-home', dshHome,
-  ], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  ], { cwd: stateRoot, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', chunk => { out += chunk; });

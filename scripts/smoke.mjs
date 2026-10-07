@@ -15,7 +15,7 @@ const target = join(workspace, real ? 'energy.json' : 'result.txt');
 const config = value('--config');
 if (real && !config) throw new Error('Real smoke requires --config; provider/model must be explicit.');
 const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));
-const args = [cli, 'serve', '--state-root', join(root,'state'), '--approval-mode', 'allow-once'];
+const args = [cli, 'serve', '--standalone', '--state-root', join(root,'state'), '--approval-mode', 'allow-once'];
 if (config) args.push('--config', resolve(config));
 if (!real) args.push('--worker-command', process.execPath, '--worker-arg', fileURLToPath(new URL('../test/fake-acp-agent.mjs', import.meta.url)), '--prompt-timeout-ms', '5000');
 const child = spawn(process.execPath, args, { cwd: workspace, env: { ...process.env,
