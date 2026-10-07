@@ -78,7 +78,7 @@ test('interactive menu uses cached routes and requires final confirmation', asyn
     { value: JSON.stringify(['provider-b', 'model-b']) },
   ] } } }));
   const otherFields = Object.keys(BUILT_IN_CONFIG).length - 3;
-  const output = await run(['--state-root', 'cache'], `2\n1\n${'\n'.repeat(otherFields)}y\n`);
+  const output = await run(['--cached-models', '--state-root', 'cache'], `2\n1\n${'\n'.repeat(otherFields)}y\n`);
   const config = JSON.parse(readFileSync(path, 'utf8'));
   assert.equal(config.provider, 'provider-b');
   assert.equal(config.model, 'model-b');
@@ -168,4 +168,50 @@ test('Desktop interactive selection still requires save confirmation', async t =
   assert.equal(existsSync(path), false);
   await run(['--desktop', '--set', 'model', 'chosen'], `${desktop}\ny\n`);
   assert.equal(JSON.parse(readFileSync(path, 'utf8')).model, 'chosen');
+});
+
+test('configuration discovery uses edited home/profile before route selection and preserves cancellation', async t => {
+  const { cwd, path } = fixture(t);let outputText='',seen;
+  const discoveryFields=7, remaining=Object.keys(BUILT_IN_CONFIG).length-3-discoveryFields;
+  await main([], {
+    cwd, input:Readable.from([`custom-home\ncustom-profile\n${'\n'.repeat(5)}2\n1\n${'\n'.repeat(remaining)}n\n`]),
+    output:new Writable({write(chunk,encoding,done){outputText+=chunk;done();}}),
+    readCatalogue:async config=>{seen=config;return {routes:[{provider:'a',model:'aa'},{provider:'b',model:'bb'}],source:'fixture',warnings:[]};},
+  });
+  assert.equal(seen.dshHome,'custom-home');assert.equal(seen.profile,'custom-profile');
+  assert.match(outputText,/配置菜单/);assert.match(outputText,/"provider": "b"/);assert.match(outputText,/"model": "bb"/);
+  assert.equal(existsSync(path),false);
+});
+
+test('discovery failure falls back to cache without writing or exposing raw parser errors', async t => {
+  const {cwd,path}=fixture(t);const state=join(cwd,'.bridge-state');mkdirSync(state);
+  writeFileSync(join(state,'models.json'),JSON.stringify({schema:1,summary:{model:{choices:[{value:'["cached","cached-model"]'}]}}}));
+  let text='';const remaining=Object.keys(BUILT_IN_CONFIG).length-10;
+  await main([], {cwd,input:Readable.from([`${'\n'.repeat(7)}1\n1\n${'\n'.repeat(remaining)}n\n`]),
+    output:new Writable({write(b,e,done){text+=b;done();}}),
+    readCatalogue:async()=>{throw Error('只读接口不支持');},
+  });
+  assert.match(text,/只读接口不支持/);assert.match(text,/缓存菜单/);assert.match(text,/"provider": "cached"/);assert.equal(existsSync(path),false);
+});
+
+
+test('routes exclusive to another profile are visible but not offered as active models', async t => {
+  const {cwd,path}=fixture(t);let text='';const remaining=Object.keys(BUILT_IN_CONFIG).length-10;
+  await main([], {cwd,input:Readable.from([`${'\n'.repeat(7)}n\n1\n1\n${'\n'.repeat(remaining)}n\n`]),
+    output:new Writable({write(b,e,done){text+=b;done();}}),
+    readCatalogue:async()=>({routes:[{provider:'current',model:'active'}],source:'fixture',warnings:[],
+      otherProfiles:[{profile:'desktop',routes:[{provider:'ustcllm',model:'custom'}]}]}),
+  });
+  assert.match(text,/其他 profile desktop/);assert.match(text,/ustcllm \/ custom/);
+  assert.match(text,/不作为可用选项/);assert.match(text,/"provider": "current"/);
+  assert.ok(!text.includes('1) ustcllm'));assert.equal(existsSync(path),false);
+});
+
+
+test('yes/check modes never enter catalogue transfer even with confirmation text available',async t=>{
+ const {cwd}=fixture(t);
+ for(const args of [['--yes'],['--check']]){
+  await main(args,{cwd,input:Readable.from(['y\nSYNC\n']),output:new Writable({write(b,e,done){done();}}),
+    readCatalogue:async()=>{throw Error('must not discover');},planSync:async()=>{throw Error('must not plan');},applySync:()=>{throw Error('must not write');}});
+ }
 });

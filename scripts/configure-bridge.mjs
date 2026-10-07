@@ -5,6 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import { BUILT_IN_CONFIG, validateConfig, defaultConfigPath } from '../src/config.mjs';
+import { planProviderSync, applyProviderSync } from '../src/platform/provider-sync.mjs';
+import { readConfiguredCatalogue } from '../src/platform/catalogue.mjs';
 import { desktopWorkerConfig } from '../src/platform/desktop.mjs';
 
 const fields = Object.keys(BUILT_IN_CONFIG).filter(key => key !== 'schema');
@@ -32,7 +34,7 @@ const authenticationHints = `认证说明：deepseek-account 使用 Desktop 微�
 复用账号登录时，桥与 Desktop 应使用相同 dshHome/DSH_HOME，桥仍使用 acp profile。
 Desktop 预置保留 provider/model，不会自动切换认证方式。
 `;
-const help = `交互式桥配置（仅修改桥配置，不启动 DSH）
+const help = `交互式桥配置（读取 DSH 模型；可双重确认同步提供商；不启动 DSH）
 用法：node scripts/configure-bridge.mjs [选项]
   --config FILE       配置文件，默认启动目录的 bridge.config.json
   --set KEY VALUE     设置字段，可重复；有 --set 时跳过字段问答
@@ -41,8 +43,9 @@ const help = `交互式桥配置（仅修改桥配置，不启动 DSH）
   --state-root DIR    读取 DIR/models.json 的已有模型目录，默认 .bridge-state
   --desktop           交互询问 Desktop 安装目录并配置其 CLI 启动器
   --desktop-root DIR  指定 Desktop 安装目录、macOS .app 或 Resources 目录
+  --cached-models     跳过 DSH 配置读取，仅使用模型缓存/手工输入
   --help              显示帮助
-Enter 保留当前值；可空字段输入 null；保存前明确确认。
+Enter 保留当前值；可空字段输入 null；保存前明确确认。\n跨 profile 提供商同步仅在交互模式提供，必须先答 y 再输入 SYNC；--yes 不会自动同步。
 ${desktopPathHints}${authenticationHints}`;
 
 export function parseValue(key, text) {
@@ -135,15 +138,43 @@ function cachedModels(stateRoot) {
   } catch { return []; }
 }
 
-export async function main(args = process.argv.slice(2), { input = process.stdin, output = process.stdout, cwd = process.cwd() } = {}) {
+// DSH writes are separate from saving bridge.config.json and always require
+// two interactive confirmations. --yes/--check never enter this workflow.
+export async function confirmProviderTransfers(config, catalogue, { ask, output, planSync = planProviderSync, applySync = applyProviderSync }) {
+  let synced = 0;
+  for (const other of catalogue.otherProfiles ?? []) {
+    for (const provider of [...new Set(other.routes.map(route => route.provider))]) {
+      const answer = await ask(`是否将 ${other.profile} 的提供商 ${provider} 同步到 ${config.profile ?? 'acp'}？[y/N]：`);
+      if (!['y', 'yes'].includes(answer.toLowerCase())) continue;
+      let plan;
+      try { plan = await planSync(config, other.profile, provider); }
+      catch (error) { output.write(`无法同步：${error.message}\n`); continue; }
+      output.write(`同步预览：\n${JSON.stringify(plan, null, 2)}\n`);
+      output.write(`来源模型：${other.routes.filter(route => route.provider === provider).map(route => route.model).join(', ')}\n`);
+      output.write('本操作立即写入 DSH profile 并备份原文件；之后取消桥配置保存不会撤销同步。不会启动 DSH 或调用模型。\n');
+      if (await ask('二次确认：输入 SYNC 写入，其他输入取消：') !== 'SYNC') {
+        output.write('已取消同步，未写入 DSH 配置。\n'); continue;
+      }
+      try {
+        const result = await applySync(plan); synced++;
+        output.write(`已同步：${result.path}\n`);
+        if (result.backup) output.write(`DSH 原文备份：${result.backup}\n`);
+      } catch (error) { output.write(`同步失败：${error.message}\n`); }
+    }
+  }
+  return synced;
+}
+
+export async function main(args = process.argv.slice(2), { input = process.stdin, output = process.stdout, cwd = process.cwd(), readCatalogue = readConfiguredCatalogue, planSync = planProviderSync, applySync = applyProviderSync } = {}) {
   let path = defaultConfigPath(cwd), stateRoot = join(cwd, '.bridge-state');
-  let yes = false, checkOnly = false, desktop = false, desktopRoot;
+  let yes = false, checkOnly = false, desktop = false, desktopRoot, cacheOnly = false;
   const changes = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--help' || arg === '-h') { output.write(help); return; }
     if (arg === '--yes') { yes = true; continue; }
     if (arg === '--check') { checkOnly = true; continue; }
+    if (arg === '--cached-models') { cacheOnly = true; continue; }
     if (arg === '--desktop') { desktop = true; continue; }
     if (!['--config', '--state-root', '--desktop-root', '--set'].includes(arg)) throw new Error(`未知选项：${arg}`);
     const count = arg === '--set' ? 2 : 1;
@@ -189,9 +220,12 @@ export async function main(args = process.argv.slice(2), { input = process.stdin
       if (!desktop) output.write(authenticationHints);
       output.write('Enter 保留当前值；null 重置可空字段。配置不会启动 DSH 或调用模型。\n');
       raw = { ...current.value };
-      const models = cachedModels(stateRoot);
+      // Ask launch/home/profile first: the menu must describe the selected worker,
+      // not the installation that happened to be configured before this run.
+      const discoveryFields = ['dshHome', 'profile', 'dshRoot', 'workerCommand', 'workerArgs', 'workerEntry', 'nodeBin'];
+      let models = [], menuSource = '缓存菜单（可能过期）';
       const choose = async (key, values) => {
-        output.write(`\n${key} 缓存菜单（可能过期；m 手工输入）：\n${values.map((v, i) => `  ${i + 1}) ${v}`).join('\n')}\n`);
+        output.write(`\n${key} ${menuSource}（m 手工输入）：\n${values.map((v, i) => `  ${i + 1}) ${v}`).join('\n')}\n`);
         while (true) {
           const answer = await ask(`${key} [${raw[key]}]：`);
           if (!answer) return;
@@ -212,6 +246,29 @@ export async function main(args = process.argv.slice(2), { input = process.stdin
           } catch (error) { output.write(`${error.message}\n`); }
         }
       };
+      if (!cacheOnly) {
+        for (const key of discoveryFields) await edit(key);
+        try {
+          if (raw.workerArgs !== null) throw new Error('自定义 workerArgs 可能带有配置覆盖；请通过缓存或手工选择并用运行时目录核验。');
+          let catalogue = await readCatalogue(raw);
+          models = catalogue.routes;
+          for (const other of catalogue.otherProfiles ?? []) {
+            output.write(`其他 profile ${other.profile} 的配置路由（当前 ${raw.profile ?? 'acp'} 不包含，不作为可用选项）：\n`);
+            for (const route of other.routes) output.write(`  ${route.provider} / ${route.model}\n`);
+            output.write('需先同步提供商配置；修改桥的 provider/model 字段不会自动同步 DSH 配置。\n');
+          }
+          const synced = await confirmProviderTransfers(raw, catalogue, { ask, output, planSync, applySync });
+          if (synced) {
+            catalogue = await readCatalogue(raw);
+            models = catalogue.routes;
+            output.write('已重新读取目标 profile，模型菜单已刷新。\n');
+          }
+          menuSource = `配置菜单（${catalogue.source}；未验证认证或在线可用性）`;
+          for (const warning of catalogue.warnings) output.write(`目录提示：${warning}\n`);
+          output.write(`只读配置目录：${models.length} 个路由。不会启动 DSH 或调用模型。\n`);
+        } catch (error) { output.write(`目录提示：${error.message}\n`); }
+      }
+      if (!models.length) { models = cachedModels(stateRoot); menuSource = '缓存菜单（可能过期）'; }
       if (models.length) {
         await choose('provider', [...new Set(models.map(m => m.provider))]);
         const options = [...new Set(models.filter(m => m.provider === raw.provider).map(m => m.model))];
@@ -220,7 +277,7 @@ export async function main(args = process.argv.slice(2), { input = process.stdin
         output.write('未发现可用模型目录缓存，请手工填写 provider/model。\n');
         await edit('provider'); await edit('model');
       }
-      for (const key of fields.filter(key => !['provider', 'model'].includes(key))) await edit(key);
+      for (const key of fields.filter(key => !['provider', 'model', ...(!cacheOnly ? discoveryFields : [])].includes(key))) await edit(key);
       current = candidate(raw);
     }
     output.write(`\n配置预览：${path}\n${JSON.stringify(current.value, null, 2)}\n`);

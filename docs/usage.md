@@ -179,3 +179,21 @@ probe 不发模型提示；它创建新的测试目录、测试会话并尝试�
 
 
 CLI 的 delegate/reply/retry 是单次执行工具，需明确 --approval-mode deny 或 allow-once，并等待结算后退出。交互审批与异步任务使用长期运行的 serve/MCP 工具；CLI 不会声称退出后仍有后台模型任务。--wait 保留为兼容参数。
+
+### 配置时读取 DSH 模型目录
+
+运行 `node scripts/configure-bridge.mjs`，先确认 DSH home、profile 和 worker 安装入口，再从当前 profile 的 bundle、profile 补丁及 home 补丁读取提供商和模型菜单。Desktop 安装仍可使用 `--desktop` 或 `--desktop-root`。
+
+读取不会启动 DSH、调用模型、解析凭据或初始化 profile；动态条件不会执行，目录可能不完整。菜单反映本地配置，不保证账号已登录或模型在线可用。更换 profile 或安装后重新运行配置脚本刷新菜单。自定义 workerArgs 的覆盖无法静态推断时，使用缓存或手工输入。
+
+读取依赖已安装 DSH 的只读配置接口，当前支持 DeepSeek account/API 与 pi-ai 提供商。内部接口变化、未初始化 profile、无法读取的 ASAR-only 安装等情况会明确提示，并退回已有 `models.json` 缓存或手工输入；可用 `--cached-models` 主动跳过配置读取。缓存通过 `--state-root` 指定。不会为获取菜单调用有 profile 写入副作用的 `dsh --dump-config`。
+
+如果提供商只配置在 Desktop 使用的 `desktop` profile，而桥使用 `acp`，脚本会单独显示其他 profile 的路由和来源，不把它们误报为当前 worker 可用。仅修改桥配置中的 provider/model 不会同步 DSH 插件配置；使用前需要将提供商配置同步到 ACP，不能直接把桥的 profile 改成 desktop 来替代 ACP 协议入口。
+
+### 双重确认同步提供商
+
+交互配置发现其他 profile 的额外路由时，会逐提供商询问是否同步。先回答 `y`，再查看来源/目标、添加或替换范围、模型列表及备份说明；输入准确的 `SYNC` 才写入目标 profile 的 `cordis.patch.yml`。其他回答或输入结束均不触发该次写入。`--yes`、`--check`、`--cached-models` 不自动同步。
+
+同步复制选定提供商的完整配置，包括已有认证引用和可能的内联配置值，不读取凭据文件、不显示密钥/headers。同名提供商会被替换，目标插件中其他提供商及其他配置保留；不会复制整个 Desktop profile，也不会更换桥的 ACP 协议入口。目标插件须已启用且唯一；home 补丁导致冲突时停止，不自动修改全局补丁或安装插件。
+
+DSH 写入与桥配置保存分开：第二次确认后立即同步，之后取消桥配置保存不会撤销它。原补丁文件按原始字节备份，并在写入前检查相关配置是否变化；格式允许时追加覆盖补丁，否则重新序列化列表，预览会说明。成功后重新读取菜单；已有运行中的 worker 可能需要重启才能使用新路由。恢复时在没有配置写入进程的情况下用提示的备份覆盖目标补丁文件；若原文件不存在，恢复为删除新建补丁文件。认证引用的相对路径/表达式仍按目标 profile 环境解释，需要自行核对，不代表已验证模型调用。
