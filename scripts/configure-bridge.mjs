@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { resolveCliLanguage, safeCliLanguage, formatCliError, translateDiagnostic } from '../src/cli-language.mjs';
 import { readFileSync, lstatSync, openSync, writeFileSync, closeSync, fsyncSync, renameSync, unlinkSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -44,6 +45,7 @@ const help = `交互式桥配置（读取 DSH 模型；可双重确认同步提�
   --desktop           交互询问 Desktop 安装目录并配置其 CLI 启动器
   --desktop-root DIR  指定 Desktop 安装目录、macOS .app 或 Resources 目录
   --cached-models     跳过 DSH 配置读取，仅使用模型缓存/手工输入
+  --lang en|zh-CN     错误信息语言；默认英文，覆盖 DSH_BRIDGE_LANG
   --help              显示帮助
 Enter 保留当前值；可空字段输入 null；保存前明确确认。\n跨 profile 提供商同步仅在交互模式提供，必须先答 y 再输入 SYNC；--yes 不会自动同步。
 ${desktopPathHints}${authenticationHints}`;
@@ -140,7 +142,7 @@ function cachedModels(stateRoot) {
 
 // DSH writes are separate from saving bridge.config.json and always require
 // two interactive confirmations. --yes/--check never enter this workflow.
-export async function confirmProviderTransfers(config, catalogue, { ask, output, planSync = planProviderSync, applySync = applyProviderSync }) {
+export async function confirmProviderTransfers(config, catalogue, { ask, output, planSync = planProviderSync, applySync = applyProviderSync, language = 'en' }) {
   let synced = 0;
   for (const other of catalogue.otherProfiles ?? []) {
     for (const provider of [...new Set(other.routes.map(route => route.provider))]) {
@@ -148,7 +150,7 @@ export async function confirmProviderTransfers(config, catalogue, { ask, output,
       if (!['y', 'yes'].includes(answer.toLowerCase())) continue;
       let plan;
       try { plan = await planSync(config, other.profile, provider); }
-      catch (error) { output.write(`无法同步：${error.message}\n`); continue; }
+      catch (error) { output.write(`${language === 'zh-CN' ? '无法同步' : 'Cannot synchronize'}: ${translateDiagnostic(error.message, language)}\n`); continue; }
       output.write(`同步预览：\n${JSON.stringify(plan, null, 2)}\n`);
       output.write(`来源模型：${other.routes.filter(route => route.provider === provider).map(route => route.model).join(', ')}\n`);
       output.write('本操作立即写入 DSH profile 并备份原文件；之后取消桥配置保存不会撤销同步。不会启动 DSH 或调用模型。\n');
@@ -159,19 +161,25 @@ export async function confirmProviderTransfers(config, catalogue, { ask, output,
         const result = await applySync(plan); synced++;
         output.write(`已同步：${result.path}\n`);
         if (result.backup) output.write(`DSH 原文备份：${result.backup}\n`);
-      } catch (error) { output.write(`同步失败：${error.message}\n`); }
+      } catch (error) { output.write(`${language === 'zh-CN' ? '同步失败' : 'Synchronization failed'}: ${translateDiagnostic(error.message, language)}\n`); }
     }
   }
   return synced;
 }
 
 export async function main(args = process.argv.slice(2), { input = process.stdin, output = process.stdout, cwd = process.cwd(), readCatalogue = readConfiguredCatalogue, planSync = planProviderSync, applySync = applyProviderSync } = {}) {
+  const language = resolveCliLanguage(args);
+  let languageSeen = false;
   let path = defaultConfigPath(cwd), stateRoot = join(cwd, '.bridge-state');
   let yes = false, checkOnly = false, desktop = false, desktopRoot, cacheOnly = false;
   const changes = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === '--help' || arg === '-h') { output.write(help); return; }
+    if (arg === '--lang') {
+      if (languageSeen) throw new Error('重复选项：--lang');
+      languageSeen = true; i++; continue;
+    }
+    if (arg === '--help' || arg === '-h') { output.write(language === 'zh-CN' ? help : 'Usage: node scripts/configure-bridge.mjs [options]\n  --config FILE\n  --set KEY VALUE (repeatable)\n  --yes\n  --check\n  --state-root DIR\n  --desktop\n  --desktop-root DIR\n  --cached-models\n  --lang en|zh-CN (overrides DSH_BRIDGE_LANG; default en)\n  --help\nErrors use the selected language; interactive questions remain Chinese.\nProvider transfer requires y followed by SYNC; --yes does not authorize it.\n'); return; }
     if (arg === '--yes') { yes = true; continue; }
     if (arg === '--check') { checkOnly = true; continue; }
     if (arg === '--cached-models') { cacheOnly = true; continue; }
@@ -243,7 +251,7 @@ export async function main(args = process.argv.slice(2), { input = process.stdin
             const next = candidate({ ...raw, [key]: parseValue(key, answer) });
             raw = next.value;
             return;
-          } catch (error) { output.write(`${error.message}\n`); }
+          } catch (error) { output.write(`${translateDiagnostic(error.message, language)}\n`); }
         }
       };
       if (!cacheOnly) {
@@ -257,7 +265,7 @@ export async function main(args = process.argv.slice(2), { input = process.stdin
             for (const route of other.routes) output.write(`  ${route.provider} / ${route.model}\n`);
             output.write('需先同步提供商配置；修改桥的 provider/model 字段不会自动同步 DSH 配置。\n');
           }
-          const synced = await confirmProviderTransfers(raw, catalogue, { ask, output, planSync, applySync });
+          const synced = await confirmProviderTransfers(raw, catalogue, { ask, output, planSync, applySync, language });
           if (synced) {
             catalogue = await readCatalogue(raw);
             models = catalogue.routes;
@@ -266,7 +274,7 @@ export async function main(args = process.argv.slice(2), { input = process.stdin
           menuSource = `配置菜单（${catalogue.source}；未验证认证或在线可用性）`;
           for (const warning of catalogue.warnings) output.write(`目录提示：${warning}\n`);
           output.write(`只读配置目录：${models.length} 个路由。不会启动 DSH 或调用模型。\n`);
-        } catch (error) { output.write(`目录提示：${error.message}\n`); }
+        } catch (error) { output.write(`${language === 'zh-CN' ? '目录提示' : 'Catalogue warning'}: ${translateDiagnostic(error.message, language)}\n`); }
       }
       if (!models.length) { models = cachedModels(stateRoot); menuSource = '缓存菜单（可能过期）'; }
       if (models.length) {
@@ -296,5 +304,5 @@ export async function main(args = process.argv.slice(2), { input = process.stdin
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  main().catch(error => { process.stderr.write(`配置失败：${error.message}\n`); process.exitCode = 1; });
+  main().catch(error => { const language = safeCliLanguage(process.argv.slice(2)); process.stderr.write(`${language === 'zh-CN' ? '配置失败' : 'Configuration failed'}:\n${formatCliError(error, language)}`); process.exitCode = 1; });
 }

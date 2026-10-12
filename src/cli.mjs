@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { stdin, stdout } from 'node:process';
 
+import { resolveCliLanguage, safeCliLanguage, formatCliError, translateDiagnostic } from './cli-language.mjs';
 import { Store, StoreError } from './store.mjs';
 import { SessionMap } from './session-map.mjs';
 import { Bridge, BridgeError } from './orchestration.mjs';
@@ -59,13 +60,56 @@ export const USAGE = `用法：dsh-bridge <命令> [选项]
   --workspace <目录>        models 命令用于建立会话的工作区（默认当前目录）
   --standalone          serve 使用旧的单进程模式，独占状态目录
   --idle-timeout-ms <毫秒>  共享后台在最后一个客户端离开后延迟退出（默认 30000）
+  --lang <语言>         en / zh-CN；默认 en，可用 DSH_BRIDGE_LANG 设置
   --help                显示本说明
 `;
+
+const ENGLISH_USAGE = `Usage: dsh-bridge <command> [options]
+
+Commands:
+  serve       MCP stdio client; start or reuse the shared backend
+  delegate    Submit a task with --file <contract.json> or --file -
+  status      Query one task with --id, or list the inventory
+  result      Read a task result with --id
+  reply       Answer a clarification with --id and --text
+  resolve     Explicitly resolve an unknown task with --id --verdict --reason
+  retry       Explicitly replay a task resolved for retry, with --id --reason
+  cancel      Request cancellation with --id
+  models      Read the worker model catalogue; --refresh refreshes it
+  inspect     Read state, damaged-file diagnostics and prompt-ledger statistics
+  preflight   Check the DSH installation and ACP profile
+  config      Show effective configuration; --init creates a template
+  unlock      Recover a stale writer lock with --stale after manual inspection
+
+Options:
+  --lang en|zh-CN          Diagnostic language; defaults to en
+                          --lang overrides DSH_BRIDGE_LANG
+  --config <file>         Configuration file
+  --state-root <dir>      State directory (default: ${DEFAULT_STATE_ROOT})
+  --dsh-home <dir>        DSH home
+  --dsh-root <dir>        Installed DSH package
+  --profile <name>        Worker profile (default: acp)
+  --provider <id>         Provider ID
+  --model-id <id>         Model ID (not provider/model)
+  --reasoning <value>     Provider-supported effort; empty uses provider default
+  --expose-model-choice   Expose model selection tools
+  --transport <name>      direct or Linux-only posix-pipes
+  --prompt-timeout-ms <n> Prompt timeout in milliseconds
+  --request-timeout-ms <n> ACP request timeout
+  --approval-mode <name> ask / deny / allow-once
+  --worker-command <path> Explicit worker executable
+  --worker-arg <value>    Worker argument; repeatable, replaces default argv
+  --workspace <dir>      Workspace used by model discovery
+  --standalone           Independent process; shuts down on stdin EOF
+  --idle-timeout-ms <n>   Shared backend idle exit delay (default: 30000)
+  --help                 Show help
+`;
+const helpFor = language => language === 'zh-CN' ? USAGE : ENGLISH_USAGE;
 
 export function parseArgs(argv) {
   const flags = {};
   const positional = [];
-  const valueFlags = new Set(['config','state-root','dsh-home','dsh-root','profile','provider','model-id','model','reasoning','transport','prompt-timeout-ms','worker-command','worker-arg','workspace','id','file','text','verdict','reason','actor','approval-mode','request-timeout-ms','idle-timeout-ms','host-fingerprint']);
+  const valueFlags = new Set(['config','state-root','dsh-home','dsh-root','profile','provider','model-id','model','reasoning','transport','prompt-timeout-ms','worker-command','worker-arg','workspace','id','file','text','verdict','reason','actor','approval-mode','request-timeout-ms','idle-timeout-ms','host-fingerprint','lang']);
   const booleanFlags = new Set(['wait', 'stale', 'help', 'json', 'refresh', 'expose-model-choice', 'init', 'standalone']);
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
@@ -173,10 +217,11 @@ export function openBridge(options = {}) {
 }
 
 export async function main(argv) {
+  const language = resolveCliLanguage(argv);
   const { flags, positional } = parseArgs(argv);
   const command = positional[0];
   if (flags.help || command === undefined || command === 'help') {
-    process.stdout.write(USAGE);
+    process.stdout.write(helpFor(language));
     return flags.help ? 0 : 2;
   }
 
@@ -184,11 +229,11 @@ export async function main(argv) {
   try {
     resolved = resolveConfig(flags);
   } catch (error) {
-    process.stderr.write(`${error.message}\n`);
+    process.stderr.write(formatCliError(error, language));
     return 1;
   }
   const { config } = resolved;
-  for (const warning of resolved.warnings) process.stderr.write(`警告：${warning}\n`);
+  for (const warning of resolved.warnings) process.stderr.write(`${language === 'zh-CN' ? '警告' : 'Warning'}: ${translateDiagnostic(warning, language)}\n`);
   const common = {
     stateRoot: flags['state-root'] ?? DEFAULT_STATE_ROOT,
     config,
@@ -223,7 +268,7 @@ export async function main(argv) {
       try {
         writeConfigFile(path);
       } catch (error) {
-        process.stderr.write(`${error.message}\n`);
+        process.stderr.write(formatCliError(error, language));
         return 1;
       }
       print({ written: path, note: '已写出一份带注释的配置模板；请按你的 DSH 实际公布的路由修改。' }, true);
@@ -417,7 +462,7 @@ export async function main(argv) {
         return 0;
       }
       default:
-        process.stderr.write(`未知命令：${command}\n\n${USAGE}`);
+        process.stderr.write(`${translateDiagnostic(`未知命令：${command}`, language)}\n\n${helpFor(language)}`);
         return 2;
     }
   } finally {
@@ -432,8 +477,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   main(process.argv.slice(2)).then(
     code => { process.exitCode = code; },
     error => {
-      process.stderr.write(`${error?.message ?? String(error)}\n`);
-      if (error?.code) process.stderr.write(`code=${error.code}\n`);
+      process.stderr.write(formatCliError(error, safeCliLanguage(process.argv.slice(2))));
       process.exitCode = 1;
     },
   );

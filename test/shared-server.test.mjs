@@ -50,7 +50,7 @@ function setup(t) {
       '--worker-command', process.execPath, '--worker-arg', FAKE_AGENT,
       '--provider', 'deepseek-official', '--model', 'deepseek-flash',
       '--prompt-timeout-ms', '5000', ...extra], {
-      cwd, env: { ...process.env, FAKE_SCENARIO: 'normal', FAKE_STATE: join(root, 'agent.json') },
+      cwd, env: { ...process.env, DSH_BRIDGE_LANG: 'en', FAKE_SCENARIO: 'normal', FAKE_STATE: join(root, 'agent.json') },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     const pending = new Map(); let buffer = '', stderr = '';
@@ -90,7 +90,7 @@ const value = response => JSON.parse(response.result.content[0].text);
 
 test('concurrent clients share one writer, isolated RPC IDs, tasks and reconnects', { timeout: 20000 }, async t => {
   const { root, state, workspace, start } = setup(t);
-  const a = start(), b = start([], workspace);
+  const a = start(), b = start(['--lang','zh-CN'], workspace);
   const inits = await Promise.all([initialize(a), initialize(b)]);
   for (const r of inits) assert.equal(r.result.serverInfo.name, 'codex-dsh-bridge');
   const owner = JSON.parse(readFileSync(join(state, 'bridge.lock'))).pid;
@@ -127,7 +127,7 @@ test('configuration mismatch is explicit and does not disturb the existing clien
   const owner = readFileSync(join(state, 'bridge.lock'), 'utf8');
   const b = start(['--reasoning', 'low']);
   assert.notEqual(await b.closed, 0);
-  assert.match(b.stderr(), /共享桥配置或代码已变化/);
+  assert.match(b.stderr(), /Shared bridge configuration or code changed/);
   assert.deepEqual((await a.rpc(2, 'ping')).result, {});
   assert.equal(readFileSync(join(state, 'bridge.lock'), 'utf8'), owner);
   await a.stop();
@@ -168,7 +168,7 @@ test('abrupt host exit reports disconnect without respawn and preserves recovery
   const lock = readFileSync(join(state, 'bridge.lock'), 'utf8');
   hardStopHost(JSON.parse(metadata).pid);
   assert.notEqual(await a.closed, 0);
-  assert.match(a.stderr(), /未重发请求/);
+  assert.match(a.stderr(), /the request was not resent/);
   // A hard kill cannot run JS cleanup on any platform. Never auto-steal its lock.
   assert.equal(readFileSync(join(state, 'bridge.lock'), 'utf8'), lock);
   assert.equal(readFileSync(join(state, 'daemon.json'), 'utf8'), metadata);

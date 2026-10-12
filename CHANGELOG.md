@@ -1,15 +1,21 @@
-# 变更记录
+[English](CHANGELOG.md) | [简体中文](CHANGELOG.zh-CN.md)
 
-## 0.2.0 — 待发布
+# Changelog
 
-- 采用 GNU GPL v3.0（GPL-3.0-only）。
-- 基于 0.1.0 参考版本重构为 Node.js 24 ESM、零直接依赖的科研委派桥；拆分提示、结果收集、观测、审批与平台适配模块。
-- 配置 schema 2，兼容读取 schema 1；支持显式 worker 可执行文件、完整 argv、JS 入口和运行时。
-- 默认转交 ACP 审批，提供待审批查询与批准工具；保留任务幂等、未知结果不重放、会话复用/恢复、澄清续跑和有界收尾。
-- MCP stdio 客户端默认复用持有状态锁的共享后台，支持多聊天与工具发现并发连接；配置不一致明确拒绝，最后一个客户端离开后延迟收尾，保留 `--standalone` 单进程模式。
-- 重叠工作区串行执行，交付文件记录字节指纹与观测证据。
-- 新增跨平台 Node 交互式配置脚本，支持缓存菜单、预览、备份、只读检查与外部修改检测。
-- 配置脚本可按 Desktop 安装目录定位 CLI 启动器，生成 direct 启动配置；缺少入口时明确报错。
-- 提供离线回归、fake 冒烟、独立协议探测、显式真实模型冒烟及三系统离线 CI。
+## 0.2.0 — pending release
 
-真实 DSH/ACP 链路需按安装环境进行独立验收。原生 Windows/macOS 官方 Desktop、ARM64、活跃 WebUI 聊天共享与运行中工具中断仍未验证。详细范围见 [兼容性记录](docs/compatibility.md)；迁移注意事项见 [配置与状态兼容](docs/migration.md)。
+- Adopted GNU GPL v3.0 (GPL-3.0-only).
+- Rebuilt on the 0.1.0 reference version as a Node.js 24 ESM research delegation bridge with zero direct dependencies; split prompts, result collection, observation, approvals and platform-adaptation modules.
+- Configuration schema 2, with compatible reads of schema 1; supports an explicit worker executable, full argv, a JS entry and a runtime.
+- Forwards ACP approvals by default and provides pending-approval query and approval tools; retains task idempotency, no replay of unknown results, session reuse/resume, clarification continuation and bounded shutdown.
+- The MCP stdio client reuses a shared background process that holds the state lock by default, supporting concurrent connections from multiple chats and tool discovery; incompatible configuration is explicitly rejected, shutdown is delayed after the last client leaves, and the `--standalone` single-process mode is retained.
+- Overlapping workspaces run serially, and deliverables record byte fingerprints and observation evidence.
+- Added a cross-platform Node interactive configuration script with cached menus, preview, backup, read-only checking and external-modification detection.
+- The configuration script can locate the CLI launcher from a Desktop installation directory and generate a direct launch configuration; it reports an explicit error when an entry point is missing.
+- Provided offline regression, fake smoke, independent protocol probing, an explicit real-model smoke test and offline CI on three systems.
+- Batch inventory reports damaged task files separately while retaining healthy tasks; workspace admission validates existing directories before durable intent, and queues receive workspace explicitly.
+- Isolated the frozen clarification/prefix ledger and added persistent event counters to `inspect`; no new fallback paths were introduced.
+- CLI diagnostic language selection is available: errors default to English, and `--lang en` / `--lang zh-CN` or `DSH_BRIDGE_LANG` selects the error language, with the flag winning.
+- Added bilingual documentation (English and Simplified Chinese) with reciprocal language links.
+
+The real DSH/ACP chain requires independent acceptance for the installed environment. Native Windows/macOS official Desktop, ARM64, active WebUI chat sharing and in-flight tool interruption remain unverified. See the [compatibility records](docs/en/compatibility.md) for the detailed scope; see [configuration and state compatibility](docs/en/migration.md) for migration notes.

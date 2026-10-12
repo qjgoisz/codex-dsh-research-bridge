@@ -1,8 +1,10 @@
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 # codex-dsh-bridge
 
-持久化的 MCP → ACP 科研委派桥。Codex 组织目标、上下文和验收，DSH 执行推导、计算与文件工作；桥记录任务、会话、路由和结果证据。`completed` 表示执行轮次结束，科研结论仍需独立验收。
+A durable MCP → ACP research delegation bridge. Codex organizes the goal, context and acceptance criteria; DSH performs derivations, computation and file work; the bridge records tasks, sessions, routing and result evidence. `completed` means an execution round has ended; research conclusions still require independent acceptance.
 
-当前实现使用 Node.js 24 ESM，无直接依赖。支持 stdio MCP、ACP v1、任务幂等、澄清续跑、会话恢复、模型路由和有界收尾。默认不要求工具清单，也不强制离线。DSH 实际发出的审批默认通过 `dsh_approvals` / `dsh_approve` 转交主控。
+The current implementation uses Node.js 24 ESM with no direct dependencies. It supports stdio MCP, ACP v1, task idempotency, clarification continuation, session resume, model routing and bounded shutdown. No tool manifest is required by default, and the bridge is not forced offline. Approvals actually emitted by DSH are forwarded to the controller through `dsh_approvals` / `dsh_approve` by default.
 
 ```sh
 node src/cli.mjs --help
@@ -11,22 +13,23 @@ node src/cli.mjs preflight
 node src/cli.mjs serve --state-root ./bridge-state
 ```
 
-在仓库目录运行。交互式配置脚本跨平台，预览校验后确认保存，修改已有文件时保留原始备份；也可用 `config --init` 仅创建默认配置。模板默认 deepseek-official/deepseek-flash/high；运行时目录是路由与推理选项的依据，不会自动换模型。凭据继续由 DSH 管理。
+Run these from the repository directory. The interactive configuration script is cross-platform: it previews and validates before asking you to confirm the save, and preserves an original backup when modifying an existing file; `config --init` can also create a default configuration only. The template defaults to deepseek-official/deepseek-flash/high; the runtime catalogue is the basis for routing and reasoning options and does not switch models automatically. Credentials continue to be managed by DSH.
 
-使用 Desktop 时运行 `node scripts/configure-bridge.mjs --desktop`，按提示指定安装目录以定位 CLI；不会启动图形应用或调用模型。交互页面会提示 `.app`、`Contents/Resources` 与 `resources` 的常见结尾。微信/账号登录应选择 `deepseek-account` 并共用 Desktop 的 DSH home；`deepseek-official` 需要 API 密钥，Desktop 预置不会自动切换路由。入口布局及平台限制见使用文档。
+When using Desktop, run `node scripts/configure-bridge.mjs --desktop` and provide the installation directory as prompted so the CLI can be located; it does not start the graphical application or call a model. The interactive questions mention the common endings `.app`, `Contents/Resources` and `resources`. WeChat/account login should select `deepseek-account` and share Desktop's DSH home; `deepseek-official` requires an API key, and the Desktop preset will not switch routing automatically. See the usage documentation for entry layouts and platform limits.
 
-真实 DSH 的接入需按安装版本进行独立探测与验收。已提供离线回归、无模型协议探测和显式真实模型冒烟；Windows/macOS 官方 Desktop、ARM64 与活跃 WebUI 聊天共享仍待验证。详见兼容性说明。
+Connecting a real DSH installation requires independent probing and acceptance for the installed version. Offline regression, model-free protocol probing and an explicit real-model smoke test are provided; Windows/macOS official Desktop, ARM64 and active WebUI chat sharing remain unverified. See the compatibility notes for details.
 
-- [使用与部署](docs/usage.md)
-- [Windows 与 macOS 快速开始](docs/usage.md#windows-与-macos-快速开始)
-- [架构与不变量](docs/architecture.md)
-- [兼容性与验证记录](docs/compatibility.md)
-- [配置与状态兼容](docs/migration.md)
-- [许可证](LICENSE)
-- [来源与版权声明](NOTICE.md)
-- [参与开发](CONTRIBUTING.md)
-- [变更记录](CHANGELOG.md)
-- [发布流程](docs/releasing.md)
+- [Usage and deployment](docs/en/usage.md)
+- [Windows and macOS quick start](docs/en/usage.md#windows-and-macos-quick-start)
+- [Architecture and invariants](docs/en/architecture.md)
+- [Compatibility and validation records](docs/en/compatibility.md)
+- [Configuration and state compatibility](docs/en/migration.md)
+- [License](LICENSE)
+- [Origin and copyright notice](NOTICE.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+- [Release process](docs/en/releasing.md)
+- [Clarification prefix ledger experiment](docs/en/prompt-ledger-experiment.md)
 
 ```sh
 npm run check
@@ -35,6 +38,14 @@ npm run test:unit
 npm run smoke
 ```
 
-默认测试使用 fake ACP worker，无需 DSH、凭据、网络或模型费用。`probe` 会启动真实 DSH 并创建隔离测试会话，但不发送模型提示。`smoke -- --allow-model --config <配置文件>` 才会调用真实模型；使用独立测试工作区和状态，不复用研究会话。
+The default tests use a fake ACP worker and need no DSH, credentials, network or model usage. `probe` starts a real DSH and creates an isolated test session, but does not send a model prompt. Only `smoke -- --allow-model --config <config file>` calls a real model; it uses an isolated test workspace and state and does not reuse research sessions.
 
-本项目采用 GNU GPL v3.0（GPL-3.0-only），见 LICENSE。当前保留 private=true，未发布 npm 包。
+This project is licensed under GNU GPL v3.0 (GPL-3.0-only), see LICENSE. It currently keeps private=true and has not published an npm package; npm publication is pending.
+
+## Documentation languages
+
+The public documentation is maintained in English and Simplified Chinese, with English as the default entry. Every page carries reciprocal language links, and corresponding files keep the same base filename. Behavior changes must update both languages in the same pull request; wording fixes may touch a single language, and a delayed translation is marked with the source revision or date it lags. Identifiers, options, error codes and JSON remain untranslated. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## CLI error language
+
+CLI errors default to English. `--lang en`, `--lang zh-CN` or the `DSH_BRIDGE_LANG` environment variable selects the language of error output; when both are given, the command-line flag wins. This policy applies to CLI errors and help output. Interactive configuration prompts, menus and previews are not claimed to be fully translated. Human-facing errors keep stable codes and the original upstream diagnostic text. Historical task records, JSON payloads, protocol records and research prompts are not rewritten. See [Usage and deployment](docs/en/usage.md#cli-language-and-error-output).

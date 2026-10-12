@@ -12,6 +12,7 @@ jobs:
         with:
           node-version: '24'
       - run: npm run check
+      - run: npm run check:docs
       - run: npm run test:unit
       - if: runner.os == 'Linux'
         run: npm test

@@ -13,9 +13,10 @@
   },
   "scripts": {
     "test": "node test/run.mjs",
-    "test:unit": "node --test test/refactor.test.mjs test/config-platform-dsh.test.mjs test/configure-bridge.test.mjs test/catalogue.test.mjs test/provider-sync.test.mjs test/shared-server.test.mjs test/first-batch.test.mjs test/prompt-ledger.test.mjs",
+    "test:unit": "node --test test/refactor.test.mjs test/config-platform-dsh.test.mjs test/configure-bridge.test.mjs test/catalogue.test.mjs test/provider-sync.test.mjs test/shared-server.test.mjs test/first-batch.test.mjs test/prompt-ledger.test.mjs test/cli-language.test.mjs",
     "configure": "node scripts/configure-bridge.mjs",
     "check": "node scripts/check.mjs",
+    "check:docs": "node scripts/check-docs.mjs",
     "probe": "node scripts/probe.mjs",
     "smoke": "node scripts/smoke.mjs"
   },

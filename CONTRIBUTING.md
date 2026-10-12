@@ -1,20 +1,40 @@
-# 参与开发
+[English](CONTRIBUTING.md) | [简体中文](CONTRIBUTING.zh-CN.md)
 
-项目采用 GPL-3.0-only；提交贡献应有权按该许可证提供，并保留已有版权与许可声明。完整条款见 LICENSE。
+# Contributing
 
-需要 Node.js 24+。当前项目没有直接依赖；克隆后可以直接执行：
+The project is licensed under GPL-3.0-only. A contribution must be one you have the right to provide under that license, and existing copyright and license notices must be preserved. See LICENSE for the full terms.
+
+Node.js 24+ is required. The project currently has no direct dependencies; after cloning you can run:
 
 ```sh
 npm run check
+npm run check:docs
 npm run test:unit
 npm test
 npm run smoke
 ```
 
-`test:unit` 用于跨平台配置、契约、启动参数与交互配置检查。完整历史回归 `npm test` 暂以 Linux 为基准。CI 在 Linux、Windows、macOS 执行语法与单元测试，Linux 另跑完整回归。离线测试不需要 DSH、凭据、联网或模型额度。
+`test:unit` covers cross-platform configuration, contracts, launch arguments and interactive configuration checks. The full historical regression `npm test` currently uses Linux as its baseline. CI runs syntax and unit tests on Linux, Windows and macOS, with the full regression additionally on Linux. Offline tests need no DSH, credentials, network or model quota.
 
-修改协议、状态机或收尾行为时，提供能够复现问题的 fake ACP 报文或故障注入测试。区分已发出的提示、收到的响应与独立验收；未知结果不自动重放。两个模型意见一致不能替代事实或科研证据。
+When changing the protocol, state machine or shutdown behavior, provide a fake ACP message or fault-injection test that reproduces the problem. Distinguish prompts that were sent, responses that were received, and independent acceptance; unknown results are not automatically replayed. Agreement between two models cannot replace facts or research evidence.
 
-真实 DSH 探测会创建测试会话；真实模型冒烟还会消耗额度，需要操作者明确选择。使用独立工作区、配置和状态目录，不复用研究会话。不要提交凭据、研究数据、真实会话记录、本机配置、日志或个人安装路径。报告兼容性时注明系统、架构、Node/DSH/ACP 版本及实际入口；离线模拟不等于原生客户端验收。
+Real DSH probing creates a test session; a real-model smoke test also consumes quota and requires an explicit operator choice. Use an isolated workspace, configuration and state directory, and do not reuse research sessions. Do not commit credentials, research data, real session records, local machine configuration, logs or personal installation paths. When reporting compatibility, state the system, architecture, Node/DSH/ACP versions and the actual entry point; offline simulation is not equivalent to native client acceptance.
 
-提交说明写清问题、修改后的行为、复现或验证命令及限制。保持配置、CLI/MCP 接口和文档一致。提出异议时给出可检验的证据与替代方案，不静默改变任务范围。
+A commit message should state the problem, the changed behavior, the reproduction or verification commands, and the limits. Keep configuration, the CLI/MCP interfaces and the documentation consistent. When raising an objection, provide testable evidence and an alternative, and do not silently change the task scope.
+
+## Bilingual documentation policy
+
+The public documentation is maintained in English (`*.md`, `docs/en/`) and Simplified Chinese (`*.zh-CN.md`, `docs/zh-CN/`), with English as the default entry. Corresponding files keep the same base filename and every page carries reciprocal language links.
+
+- Behavior changes must update both languages in the same pull request.
+- Wording, typo and formatting fixes may touch only one language.
+- A delayed translation must be marked with the source revision or date it lags behind, for example `Translation pending: source revision <commit or date>`.
+- Identifiers, option names, error codes and JSON field names/values remain untranslated in both languages.
+
+## CLI error language policy
+
+CLI errors default to English. `--lang en`, `--lang zh-CN` or the `DSH_BRIDGE_LANG` environment variable selects the language of error output; when both are given, the command-line flag wins. The policy covers CLI errors and help output; interactive prompts are not claimed to be fully translated. Human-facing errors keep stable codes and the original upstream diagnostics, and historical task/JSON/protocol records and research prompts are not rewritten. See [Usage and deployment](docs/en/usage.md#cli-language-and-error-output).
+
+The diagnostic catalogue is maintained in `src/cli-language.mjs`. When changing a bridge diagnostic, update its English counterpart and test it at the CLI boundary. Placeholder values such as paths, task IDs and provider/model identifiers must remain literal. `npm run check:docs` checks paired filenames, reciprocal language links and local links/heading anchors without network access.
+
+Known bridge diagnostics are translated at the CLI presentation boundary. Unrecognized diagnostic text remains literal so upstream details are not guessed or discarded. Paths, task IDs, provider/model values and existing error codes remain unchanged.
