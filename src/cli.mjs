@@ -368,7 +368,7 @@ export async function main(argv) {
         return ['completed', 'needs_clarification'].includes(view.status) ? 0 : 1;
       }
       case 'status': {
-        print(flags.id ? bridge.status(flags.id) : { tasks: bridge.list() }, true);
+        print(flags.id ? bridge.status(flags.id) : bridge.inventory(), true);
         return 0;
       }
       case 'result': {

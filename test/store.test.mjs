@@ -111,14 +111,14 @@ suite.test('残留锁必须由显式授权清理，不会按时间自动删除',
   ctx.equal(store.lockStatus().state, 'free');
 });
 
-suite.test('损坏的任务文件导致读取失败而不是被静默跳过', ctx => {
+suite.test('单个损坏任务仍严格拒绝读取，而非静默跳过', ctx => {
   const root = ctx.tempDir();
   const store = open(root);
   store.write(makeRecord());
   writeFileSync(join(root, 'tasks', 't1.json'), '{ 这不是 JSON');
   const error = (() => {
     try {
-      store.readAll();
+      store.read('t1');
       return null;
     } catch (caught) {
       return caught;

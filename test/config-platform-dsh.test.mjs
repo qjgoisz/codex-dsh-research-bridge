@@ -1,7 +1,7 @@
 // 离线纯函数测试：配置校验 / CLI 覆盖 / 平台启动参数 / 进程目标 / 任务契约。
 //
 // 范围与边界（与本任务验收一致）：
-// - 只调用纯函数，不启动任何子进程、不联网、不调用模型、不读写测试数据文件。
+// - 不启动任何子进程、不联网、不调用模型；契约校验只读检查现有工作目录。
 // - 平台参数（win32 / linux / darwin）只是模拟构建参数，不代表在原生 Windows/macOS
 //   上做过实测；本文件只断言函数返回的启动 argv 与进程目标语义。
 // - workspace 一律用 path.resolve 生成本平台绝对路径。
@@ -27,7 +27,7 @@ import { validateTaskContract } from '../src/contract.mjs';
 const clone = value => structuredClone(value);
 
 // 本平台绝对路径，避免硬编码 POSIX 前缀。
-const workspace = resolve('config-platform-dsh-workspace');
+const workspace = resolve('.');
 
 function makeContract(overrides = {}) {
   return {

@@ -160,7 +160,7 @@ node <桥目录>/src/cli.mjs serve --config <配置文件> --state-root <独立�
 | dsh_approvals / dsh_approve | 查看原始待审批选项，回传已获授权的选项及理由 |
 | dsh_models | 开启模型选择后读取/刷新运行时目录 |
 
-最小契约需要 id、objective、phase、workspace、plan、acceptance。workspace 必须为本平台已存在的绝对路径；阶段可为 explore、numerics、writing、maintenance、generic。research 可记录模型、单位、假设、参数范围、输入提交与未决问题；deliverables 指定需要描述与计算指纹的文件。
+最小契约需要 id、objective、phase、workspace、plan、acceptance。workspace 必须为本平台已存在目录的绝对路径；目录缺失或传入文件会与其他契约错误一起返回，校验失败不创建任务记录。阶段可为 explore、numerics、writing、maintenance、generic。research 可记录模型、单位、假设、参数范围、输入提交与未决问题；deliverables 指定需要描述与计算指纹的文件。
 
 示例见 examples/task.json。文件使用 __WORKSPACE__ 占位，提交前替换为实际绝对路径。支持路径中的空格与中文。不要将 Windows 路径字符串直接套用为 POSIX 路径。
 
@@ -182,6 +182,8 @@ node src/cli.mjs inspect --state-root <状态目录>
 node src/cli.mjs models --config <配置文件> --state-root <状态目录> --workspace <测试目录> --refresh
 node src/cli.mjs unlock --state-root <状态目录> --stale
 ```
+
+批量状态查询、`inspect` 与恢复盘点会继续列出有效任务，并用 `problems` 单独报告无法读取的任务文件（任务 id、错误码和原因）。损坏文件不会被修改、删除或自动重放；直接查询该任务仍严格报错。`Store.readAll()` 保留 Map 返回值，附带本次盘点的 `problems` 数组。
 
 probe 不发模型提示；它创建新的测试目录、测试会话并尝试关闭/恢复，DSH 可能保存元数据。上游升级后用独立状态做验证，不改写旧研究状态。活动写者的锁不能按年龄抢占；unlock --stale 仍拒绝活动写者。
 

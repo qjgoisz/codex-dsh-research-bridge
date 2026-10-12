@@ -1,6 +1,6 @@
 
 
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 
 const PHASES = ['explore', 'numerics', 'writing', 'maintenance', 'generic'];
@@ -78,6 +78,13 @@ export function validateTaskContract(input, { exposeModelChoice = false } = {}) 
 
   if (!isSafeAbsolutePath(input.workspace)) {
     error('workspace', '必须是绝对路径，且不得含 `..` 或 NUL：这是 worker 的工作区根。');
+  } else {
+    try {
+      if (!statSync(input.workspace).isDirectory()) error('workspace', '必须是已存在的目录，不能是文件。');
+    } catch (cause) {
+      error('workspace', ['ENOENT', 'ENOTDIR'].includes(cause.code)
+        ? '工作区目录不存在；请先创建该目录。' : '无法访问工作区目录。');
+    }
   }
 
   if (has(input, 'contextRevision') && input.contextRevision !== null

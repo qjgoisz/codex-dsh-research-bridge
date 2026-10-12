@@ -362,17 +362,20 @@ export class McpServer {
     try {
       if (args.id !== undefined) return ok(this.#bridge.status(args.id));
       const limit = Number.isSafeInteger(args.limit) && args.limit > 0 ? args.limit : DEFAULT_STATUS_LIMIT;
-      const tasks = this.#bridge.list();
+      const { tasks, problems } = this.#bridge.inventory();
       const attention = tasks.filter(task => (['unknown', 'cancelling', 'needs_clarification'].includes(task.status) || task.pendingApprovals?.length));
       const rest = tasks
         .filter(task => !attention.includes(task))
         .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
       return ok({
         count: tasks.length,
+        problems,
         needs_attention: attention,
         recent: rest.slice(0, limit),
         omitted: Math.max(0, rest.length - limit),
-        note: tasks.length === 0
+        note: problems.length > 0
+          ? `已列出 ${tasks.length} 个有效任务，另有 ${problems.length} 个任务文件读取失败；请核对 problems，桥未修改或重放它们。`
+          : tasks.length === 0
           ? '当前没有任务。'
           : 'needs_attention 里的每一条都需要一个明确决定，不能直接重发。',
       });

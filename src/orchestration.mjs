@@ -10,7 +10,6 @@ export { buildObservation, CLARIFY_MARKER, extractClarification, renderPrompt, r
 
 
 import { resolve, isAbsolute } from 'node:path';
-import { existsSync } from 'node:fs';
 
 import { describeArtifacts, fingerprintOf, verifyFingerprint } from './fingerprint.mjs';
 import { checkPrefixStability } from './usage.mjs';
@@ -171,7 +170,7 @@ export class Bridge {
         });
       }
     }
-    return { tasks: [...tasks.values()].length, stranded };
+    return { tasks: tasks.size, stranded, problems: tasks.problems };
   }
 
   async delegate(contract, { wait = false } = {}) {
@@ -713,8 +712,13 @@ export class Bridge {
     return this.#publicView(record);
   }
 
+  inventory() {
+    const records = this.loadTasks();
+    return { tasks: [...records.values()].map(record => this.#publicView(record)), problems: records.problems };
+  }
+
   list() {
-    return [...this.loadTasks().values()].map(record => this.#publicView(record));
+    return this.inventory().tasks;
   }
 
   result(id) {
@@ -909,8 +913,8 @@ export class Bridge {
     return next;
   }
 
-  #enqueue(sessionKey, job) {
-    return this.#workspaceQueue.enqueue(sessionKey.split('\0')[2], job);
+  #enqueue(workspace, job) {
+    return this.#workspaceQueue.enqueue(workspace, job);
   }
 
   async #dispatch(id, contract, policy) {
@@ -928,15 +932,8 @@ export class Bridge {
       { expectRevision: current.revision },
     );
 
-    if (!existsSync(contract.workspace)) {
-      throw new BridgeError(
-        'workspace_missing',
-        `工作区不存在：${contract.workspace}（worker 以它为工作目录，不存在就无法启动）`,
-        { hint: '先创建该目录，或把 workspace 改成已存在的路径。' },
-      );
-    }
     const text = renderPrompt(contract);
-    return this.#enqueue(sessionKey, async () => {
+    return this.#enqueue(contract.workspace, async () => {
       const sessionId = await this.#ensureSession(sessionKey, contract, policy);
       const record = this.#require(id);
       this.#store.write(

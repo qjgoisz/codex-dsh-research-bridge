@@ -269,9 +269,16 @@ export class Store {
 
   readAll() {
     const out = new Map();
+    // Preserve the Map API; every snapshot carries its own explicit diagnostics.
+    out.problems = [];
     for (const id of this.list()) {
-      const record = this.read(id);
-      if (record) out.set(id, record);
+      try {
+        const record = this.read(id);
+        if (record) out.set(id, record);
+        else out.problems.push({ id, code: 'missing_record', problem: '盘点时任务文件已不存在。' });
+      } catch (error) {
+        out.problems.push({ id, code: error.code ?? 'read_error', problem: error.message });
+      }
     }
     return out;
   }
@@ -294,12 +301,9 @@ export class Store {
 
   inspect() {
     const lock = this.lockStatus();
-    const tasks = [];
-    for (const id of this.list()) {
-      const record = this.read(id);
-      if (record) tasks.push({ id: record.id, status: record.status, revision: record.revision });
-    }
-    return { root: this.#root, lock, tasks, sessions: existsSync(this.sessionsPath) };
+    const records = this.readAll();
+    const tasks = [...records.values()].map(record => ({ id: record.id, status: record.status, revision: record.revision }));
+    return { root: this.#root, lock, tasks, problems: records.problems, sessions: existsSync(this.sessionsPath) };
   }
 
   sizeOf(id) {
