@@ -6,6 +6,7 @@ import {
 import { dirname, join } from 'node:path';
 
 import { validateRecord, StateError } from './state.mjs';
+import { promptLedgerEvent, summarizePromptLedger } from './prompt-ledger.mjs';
 
 const LOCK_NAME = 'bridge.lock';
 const TASKS_DIR = 'tasks';
@@ -267,6 +268,22 @@ export class Store {
       .sort();
   }
 
+  get promptLedgerEventsPath() { return join(this.#root, 'prompt-ledger-events.jsonl'); }
+
+  appendPromptLedgerEvent(event) {
+    if (!this.#locked) throw new StoreError('not_locked', '记录实验事件前必须持有写锁。');
+    const entry = promptLedgerEvent(event);
+    if (entry === null) return false;
+    appendFileSync(this.promptLedgerEventsPath, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
+    return true;
+  }
+
+  promptLedgerSummary() {
+    if (!existsSync(this.promptLedgerEventsPath)) return summarizePromptLedger('');
+    try { return summarizePromptLedger(readFileSync(this.promptLedgerEventsPath, 'utf8'), { present: true }); }
+    catch (error) { return summarizePromptLedger('', { present: true, readProblem: error.code ?? 'read_error' }); }
+  }
+
   readAll() {
     const out = new Map();
     // Preserve the Map API; every snapshot carries its own explicit diagnostics.
@@ -303,7 +320,7 @@ export class Store {
     const lock = this.lockStatus();
     const records = this.readAll();
     const tasks = [...records.values()].map(record => ({ id: record.id, status: record.status, revision: record.revision }));
-    return { root: this.#root, lock, tasks, problems: records.problems, sessions: existsSync(this.sessionsPath) };
+    return { root: this.#root, lock, tasks, problems: records.problems, promptLedger: this.promptLedgerSummary(), sessions: existsSync(this.sessionsPath) };
   }
 
   sizeOf(id) {

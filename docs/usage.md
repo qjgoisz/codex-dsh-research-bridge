@@ -174,6 +174,8 @@ node <桥目录>/src/cli.mjs serve --config <配置文件> --state-root <独立�
 
 同任务 id 和相同契约返回已有记录，不会重新执行；不同内容报冲突。超时与断线可能留下副作用，unknown 不自动重放。桥重启仅报告未结算任务；先核对工作区与 worker，再显式裁定和重试。resolve 只接受 unknown，不接受仍可能运行的 cancelling。
 
+澄清前缀账本暂作为长期观察实验保留，回退链冻结功能扩展。`inspect` 输出持久事件统计；复核判据、计数边界及用户手动复核方式见 [前缀账本实验](prompt-ledger-experiment.md)。
+
 ## 诊断与维护
 
 ```sh

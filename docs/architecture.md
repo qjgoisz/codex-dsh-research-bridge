@@ -15,6 +15,7 @@ Codex → MCP stdio → durable coordinator → ACP stdio → DSH worker
 | orchestration | 意图落盘、会话获取、任务派发、结算与恢复 |
 | state / store / session-map | 纯状态转换、单写者原子存储、会话 generation |
 | workspace-queue | 重叠目录排队，避免不同会话竞争相同文件 |
+| prompt-ledger | 冻结的澄清回退、发送文本账本与实验事件统计 |
 | prompts | 任务、独立异议、澄清历史及科研约定 |
 | collector / observation / usage / fingerprint | 正文与用量观测、提交证据和产物字节指纹 |
 | permissions | 实际审批转交、选项校验、期限与审计 |
