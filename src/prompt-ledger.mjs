@@ -96,7 +96,8 @@ export class PromptLedger {
 
     const historyIncomplete = record.incompletePromptHistory === true;
     const persistedIsCurrent = recordedText !== null
-      && !historyIncomplete                       // ← 这一条是关键
+      // An incomplete task record cannot establish the last submitted prefix.
+      && !historyIncomplete
       && persistedSeq >= seq - 1
       && (memoryText === null || memoryText === recordedText);
     let baseSource = 'none';
@@ -245,6 +246,13 @@ export class PromptLedger {
             if (RECEIPT_NO_PROMPT || PRE_WRITE.has(view?.error?.code)) {
               const current = this.#require(id);
               if (!isTerminal(current.status) || current.status === 'failed') {
+                // Compatibility rollback for the unsent reply branch selected above.
+                // Normalize only the transition input: failed is normally terminal,
+                // so this deliberately bypasses its guard to restore clarification.
+                // Keep the persisted revision/history and committed answers; do not
+                // extend this exception to other terminal states or general recovery.
+                // Replace it with an explicit rollback operation when recutting the
+                // module boundary after the observation experiment.
                 this.#store.write(transition(
                   { ...current, status: 'running' }, 'needs_clarification', {
                     at: nowIso(this.#clock),
